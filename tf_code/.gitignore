@@ -1,0 +1,7 @@
+.terraform/
+.terraform.lock.hcl
+terraform.tfstate*
+*.tfvars
+secrets.txt
+azure Part-1.md.txt
+azure-vnet-vm-setup-README.md
