@@ -1,0 +1,140 @@
+part-1
+About subscription
+
+creating resource group>select the region>tags(optional) to resource group>click on created resource group
+go to vnet>select subscription>select rg>virtual network name>virtual n/w encryption(if we want security for the network)>bastion>firewall>next>delete default subnet,later we can create
+go to vnet>click on selected vnet>settings>subnets>add subnet>public subnet(vnet range is 10.0.0.0/16)starting address 10.0.1.0  /24>add another private subnet 10.0.2.0 /24  >craete
+
+create 2 route tables becuase we have a 2 subnets one public route table with internet access another for not access to internet .associate created public route table with public subnet and private route table with private subnet.
+
+go to route table>create>created subscription>created rg> select region we are working in >give name of the route table>propagate gateway routes(yes)skip for now>create 
+similarly for private route table ,route table name demo-pvt-rt  (now rt not attached with  subnets)
+route table>go to public rt>settings>subnets>click on associate>select created vnet and public route table
+similarly for private rt,select pvt-subnet
+now we need to fix internet access in our public subnet which is associated with public-rt
+go to route tables>pub-rt>settings>routes>route name-internet>destination is ip address>0.0.0.0/0>next hop type-internet >add    // now our public route table has access to internet any resource will be deployed in this public subnet can access to internet
+now deploy vm in created public subnet
+go to vm>create>choose subscription>created rg>vm name-ubuntu-pub-vm>region and availability zone let it be>authentication type ssh public key>username azureuser,ssh public key source,generate new key pair or we can use existing>key pair name-ubuntu-pub-vm_key>>public inbound ports,select inbound ports ssh(we can keep it none,then later we can create nsg>network interface,select created vnet,select public subnet>public ip(to access that perticular vm)
+
+then go to created vmclick and connect>native ssh option  there are some commands will be given  go to terminal>go to downloads where private key is present,check the permission ls -lart make it read-only,  chmod 400 ubuntu-public-vm_key >again verify the permission   then copy the command in azure native connect,paste in terminal ssh -i unbuntu-public-vm_key  azureuser@<public-key of the machine>
+
+part-2
+now we are doing how the user can access to vm present in pvt subnet
+go to vm>choose subscription>created rg>vm name-demo-public-vm>selct created region>username azureuser,ssh public key source-generate new key pair>key pair name-demo-vm-public-key>public inbound ports-allow selected ports>select inbound  ports-ssh>network-interface>choose public subnet>public ip>create
+click on created vm>connect   go to terminal>downloads>for renaming the key mv demo-vm-public-key.pem demo-vm-ssh-key.pem  >ls -lart>(whenever we using ssh keys,then private keys should only be read-only,it cannot have read and write permission to access to any vm)now change it to read-only,then only we able to access the vm using the pvt key.chmod 400 demo-vm-ssh-key.pem>verifies permission ls -lart  ssh -i demo-vm-ssh-key.pem azureuser@<pub ip>  
+now create pvt vm into pvt subnet,
+go to vm>select subscription>created rg>key pair-demo-pvt-vm-ssh-key-pair>network interface , select created vnet,select pvt subnet>public ip-none>create
+check on created pvt vm,it has blank public ip.so we cannot access from our local laptop.now we need to use jump or bastion host which is our public vm.we have to rely on public vm to access pvt vm because both of these vm present within the same n/w.but me outside dont have access to the pvt vm or pvt subnet. now go to the terminal which is already ssh into public vm>create the pem key in that public vm,touch demo-pvt-vm-ssh-key-pair.pem >ls (file has been created)>vi demo-pvt-vm-ssh-key-pair.pem(open the file)>copy the demo-pvt-vm-ssh-key-pair.pem paste in that public vm>make it read-only>chmod 400 demo-pvt-vm-ssh-key-pair.pem > go to pvt vm>connect native ssh>copy the command >ssh -i demo-pvt-vm-ssh-key-pair.pem azureuser@<pvt vm ip>
+this is how we access the pvt-vm  present into our vnet,thats how we use the public vm  as bastion host we call it has a jump host then we try to access the pvt vm 
+
+service which is aailabe on  microsoft azure  which is connect via bastion so that we dont have to rely on  public vm instead we can use this perticular  service bastion on azure so that we connect to pvt vm 
+azure bastion is 
+go to created pvt vm>connect via bastion>authentication  type ,select-ssh-pvt key from local file username-zureuser,browse the local file (use the ssh key used for creating pvt vm)>click on connect  (now we connected the pvt vm without needing of public vm 
+
+custom data 
+#!/bin/bash
+yes | sudo apt update
+yes | sudo apt install apache2
+echo "<h1> SERVER DETAILS</h1><p><strong>Hostname:</strong>
+$(hostname)</p><p><strong>IP Address:</strong>$(hostname -l | cut -d"" -f1)</p>" >/var/www/html/index.html
+sudo systemctl restart apache
+
+
+#!/bin/bash
+# Update package list and install Apache
+yes | sudo apt update
+yes | sudo apt install apache2
+
+# Get the hostname and IP address
+HOSTNAME=$(hostname)
+IP_ADDRESS=$(hostname -I | awk '{print $1}')
+
+# Create a basic index.html with server details
+cat <<EOF | sudo tee /var/www/html/index.html
+<h1>SERVER DETAILS</h1>
+<p><strong>Hostname:</strong> ${HOSTNAME}</p>
+<p><strong>IP Address:</strong> ${IP_ADDRESS}</p>
+EOF
+
+# Restart and enable Apache
+sudo systemctl restart apache2
+sudo systemctl enable apache2
+
+check inside vm curl localhost:80
+check in browser pub-ip:80 //we cannot access ,allow port 80 (go to vm>click on vm>network setting>click on network sg>inbound security rules>add>source-any,source port ranges-*,destination-any,service-http,destination port ranges-80,protocol-tcp,action-allow>add
+now check in browser,pub-ip or pub-ip:80
+
+lb
+create rg>create vnet>delete default subnet>create subnet>route table
+then associate subnet with route table ,go to route table >settings>subnets>associate
+create vm>>select created vnet>select created subnet>assign public ip
+create another vm
+click on created vm>network  settings>click on nsg>inbound security  rules>add>http   //do this for both vm so that we can access through internet
+
+backend pool is the logical grouping of vm
+
+create lb>select created rg>standard
+Scenario | SKU to Use
+Small app for testing | Basic
+Scalable, secure, production workloads | Standard
+Inserting third-party firewalls (like Palo Alto, Fortinet) | Gateway
+
+go to backend pool>select created vnet	>select both vm ip
+health probe it will keep on checking the vm that is backend pool
+go to health probe>allow 80>save
+then  frontend ip,backend pools and health probes go into the load balancing rules
+so click on load balancin rules>select frontend ip address>backend pool>tcp,port-80,backend port-80 
+copy frontend ip address,access in the internet.
+
+autoscale-set
+benifits:
+scale in/scale out
+more automatic control on vm
+
+high traffic-->increases vms
+low traffic -->decreases vms
+
+go to lb>create lb>configure frontend ip>create
+go to vmss>select created rg>selct uniform
+
+now  create backend pool and attach that with scaleset
+go to health probe >create
+go to load balancing rule>(all the d/f services in this lb club together)>add
+give http to both vm
+
+we can enable the mfa byusing 2 ways
+conditional policy-avilable for premium tenant.we need licence for that
+azure ad>security>conditional access
+ 
+properties-previously its disabled.now it automatically enabled..so that all users must have microsoft authenticate app.
+
+ Why email is not used for authentication:
+The system will not let the user log in using this alternate email.
+It's only for receiving verification codes (during password reset or verification scenarios).
+Microsoft relies on more secure methods (MFA apps, phone numbers) for actual authentication.
+
+To assign a Global Administrator role in Azure Active Directory (AAD) and an Owner role in a subscription to a created user, follow these two separate steps:
+
+✅ 1. Assign Global Administrator Role (Azure AD)
+Steps:
+Go to Azure Portal → Microsoft Entra ID (or "Azure Active Directory").
+Go to Users → Click the user (e.g., Sushma s).
+Click Assigned roles from the left menu.
+Click + Add assignment.
+In the Add role assignment blade:
+Search for Global administrator.
+Select it and click Add.
+🔐 This gives the user admin control over Azure AD (users, groups, policies, etc).
+✅ 2. Assign Owner Role (Azure Subscription)
+Steps:
+Go to Azure Portal → Subscriptions.
+Click the subscription you want the user to own.
+In the left menu, go to Access control (IAM).
+Click + Add → Add role assignment.
+In the Role dropdown, select Owner.
+In the Assign access to dropdown, choose User, group, or service principal.
+Search and select the user (e.g., Sushma s).
+Click Next → then Review + assign.
+🔐 This gives the user full control over Azure resources in that subscription.
+
+
